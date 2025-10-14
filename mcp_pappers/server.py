@@ -1,11 +1,14 @@
 """MCP server for Pappers.fr API - Minimal implementation."""
 
+import json
 import os
 from typing import Any
 
 import httpx
 from dotenv import load_dotenv
-from fastmcp import FastMCP
+from mcp.server import Server
+from mcp.server.stdio import stdio_server
+from mcp.types import Tool, TextContent
 
 # Load environment variables
 load_dotenv()
@@ -17,11 +20,8 @@ PAPPERS_BASE_URL = "https://api.pappers.fr/v2"
 if not PAPPERS_API_KEY:
     raise ValueError("PAPPERS_API_KEY environment variable is required")
 
-# Create FastMCP server
-mcp = FastMCP(
-    name="Pappers MCP Server",
-    version="0.1.0",
-)
+# Create MCP server
+server = Server("pappers-mcp-server")
 
 
 async def _call_pappers_api(endpoint: str, params: dict[str, Any]) -> dict[str, Any]:
@@ -47,29 +47,8 @@ async def _call_pappers_api(endpoint: str, params: dict[str, Any]) -> dict[str, 
         return response.json()
 
 
-@mcp.tool()
-async def search_companies(
-    query: str,
-    page: int = 1,
-    per_page: int = 10,
-) -> str:
-    """
-    Search for French companies using Pappers.fr API.
-
-    Args:
-        query: Company name or search text (e.g., "Google France")
-        page: Page number for pagination (default: 1)
-        per_page: Number of results per page, max 100 (default: 10)
-
-    Returns:
-        JSON string with search results containing:
-        - total: Total number of results
-        - resultats: Array of companies with basic info (siren, denomination, siege)
-
-    Example:
-        search_companies("Google France")
-        search_companies("SNCF", page=2, per_page=20)
-    """
+async def _search_companies_handler(query: str, page: int = 1, per_page: int = 10) -> str:
+    """Internal handler for search_companies tool."""
     params = {
         "q": query,
         "page": page,
@@ -103,33 +82,14 @@ async def search_companies(
             ],
         }
 
-        import json
         return json.dumps(formatted, ensure_ascii=False, indent=2)
 
     except httpx.HTTPError as e:
         return f"Error calling Pappers API: {str(e)}"
 
 
-@mcp.tool()
-async def get_company_details(siren: str) -> str:
-    """
-    Get detailed information about a French company by SIREN.
-
-    Args:
-        siren: 9-digit SIREN number (e.g., "443061841" for Google France)
-
-    Returns:
-        JSON string with complete company information including:
-        - Basic info: denomination, date_creation, forme_juridique
-        - Financial: capital, chiffre_affaires, resultat
-        - Contact: siege (address), telephone, email
-        - Legal: statut_rcs, entreprise_cessee
-        - Representatives: dirigeants
-        - Establishments: etablissements
-
-    Example:
-        get_company_details("443061841")  # Google France
-    """
+async def _get_company_details_handler(siren: str) -> str:
+    """Internal handler for get_company_details tool."""
     # Validate SIREN format (9 digits)
     if not siren.isdigit() or len(siren) != 9:
         return f"Invalid SIREN format. Must be 9 digits, got: {siren}"
@@ -171,7 +131,6 @@ async def get_company_details(siren: str) -> str:
             "nombre_etablissements": result.get("nombre_etablissements"),
         }
 
-        import json
         return json.dumps(formatted, ensure_ascii=False, indent=2)
 
     except httpx.HTTPStatusError as e:
@@ -182,22 +141,110 @@ async def get_company_details(siren: str) -> str:
         return f"Error calling Pappers API: {str(e)}"
 
 
-def main():
-    """Run the MCP server with streamable HTTP transport."""
-    # Get port from environment or use default
-    port = int(os.getenv("PORT", "8001"))
-    host = os.getenv("HOST", "0.0.0.0")
+# Register tools
+@server.list_tools()
+async def list_tools() -> list[Tool]:
+    """List available tools."""
+    return [
+        Tool(
+            name="search_companies",
+            description=(
+                "Search for French companies using Pappers.fr API. "
+                "Returns a JSON string with search results containing total count, "
+                "page information, and an array of companies with basic info "
+                "(siren, denomination, siege address, date_creation, statut)."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Company name or search text (e.g., 'Google France')",
+                    },
+                    "page": {
+                        "type": "integer",
+                        "description": "Page number for pagination (default: 1)",
+                        "default": 1,
+                    },
+                    "per_page": {
+                        "type": "integer",
+                        "description": "Number of results per page, max 100 (default: 10)",
+                        "default": 10,
+                        "maximum": 100,
+                    },
+                },
+                "required": ["query"],
+            },
+        ),
+        Tool(
+            name="get_company_details",
+            description=(
+                "Get detailed information about a French company by SIREN. "
+                "Returns a JSON string with complete company information including "
+                "basic info (denomination, date_creation, forme_juridique), "
+                "financial data (capital, chiffre_affaires, resultat), "
+                "contact info (siege address), legal status, representatives, and establishments."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "siren": {
+                        "type": "string",
+                        "description": "9-digit SIREN number (e.g., '443061841' for Google France)",
+                        "pattern": "^[0-9]{9}$",
+                    },
+                },
+                "required": ["siren"],
+            },
+        ),
+    ]
 
-    print(f"Starting Pappers MCP Server on {host}:{port}")
-    print(f"API Key configured: {'✓' if PAPPERS_API_KEY else '✗'}")
-    print("\nAvailable tools:")
-    print("  - search_companies: Search for companies by name")
-    print("  - get_company_details: Get full company info by SIREN")
-    print("\nPress Ctrl+C to stop")
 
-    # Run with streamable HTTP transport (recommended, SSE is deprecated)
-    mcp.run(transport="streamable-http", host=host, port=port)
+@server.call_tool()
+async def call_tool(name: str, arguments: dict) -> list[TextContent]:
+    """Handle tool calls."""
+    if name == "search_companies":
+        result = await _search_companies_handler(
+            query=arguments["query"],
+            page=arguments.get("page", 1),
+            per_page=arguments.get("per_page", 10),
+        )
+        return [TextContent(type="text", text=result)]
+    elif name == "get_company_details":
+        result = await _get_company_details_handler(siren=arguments["siren"])
+        return [TextContent(type="text", text=result)]
+    else:
+        raise ValueError(f"Unknown tool: {name}")
+
+
+async def main():
+    """Run the MCP server with stdio transport."""
+    import sys
+    import logging
+
+    # Configure logging to stderr (stdio is used for MCP protocol)
+    logging.basicConfig(
+        level=logging.INFO,
+        stream=sys.stderr,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
+    logger = logging.getLogger(__name__)
+
+    logger.info("Starting Pappers MCP Server")
+    logger.info(f"API Key configured: {'✓' if PAPPERS_API_KEY else '✗'}")
+    logger.info("Available tools:")
+    logger.info("  - search_companies: Search for companies by name")
+    logger.info("  - get_company_details: Get full company info by SIREN")
+
+    # Run with stdio transport
+    async with stdio_server() as (read_stream, write_stream):
+        await server.run(
+            read_stream,
+            write_stream,
+            server.create_initialization_options()
+        )
 
 
 if __name__ == "__main__":
-    main()
+    import asyncio
+    asyncio.run(main())

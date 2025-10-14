@@ -1,6 +1,6 @@
 # MCP Pappers Server
 
-Serveur MCP minimaliste pour l'API Pappers.fr (données d'entreprises françaises).
+Serveur MCP pour l'API Pappers.fr (données d'entreprises françaises), construit avec le Python MCP SDK officiel.
 
 ## Installation
 
@@ -26,49 +26,53 @@ Obtenir une clé API gratuite sur: https://www.pappers.fr/api
 
 ## Utilisation Locale
 
-### Démarrer le serveur MCP (SSE)
+### Démarrer le serveur MCP
+
+Le serveur utilise le transport stdio standard du Python MCP SDK:
 
 ```bash
 python -m mcp_pappers.server
 ```
 
-Le serveur démarre sur `http://localhost:8001` par défaut.
+### Configuration Claude Desktop
 
-### Tester avec un client MCP
+Ajouter dans votre configuration Claude Desktop (`claude_desktop_config.json`):
 
-```python
-from agents.mcp import MCPServerStreamableHttp
-
-mcp_server = MCPServerStreamableHttp(
-    name="Pappers MCP Server",
-    params={
-        "url": "http://localhost:8001",
-    },
-)
-
-async with mcp_server as server:
-    # Utiliser les outils MCP
-    tools = await server.list_tools()
-    print(tools)
+```json
+{
+  "mcpServers": {
+    "pappers": {
+      "command": "python",
+      "args": ["-m", "mcp_pappers.server"],
+      "env": {
+        "PAPPERS_API_KEY": "your_api_key_here"
+      }
+    }
+  }
+}
 ```
 
 ## Outils MCP Disponibles
 
-### 1. `search_company`
-Rechercher une entreprise par nom ou SIREN/SIRET.
+### 1. `search_companies`
+Rechercher des entreprises françaises par nom.
 
 **Paramètres:**
-- `query` (str): Nom de l'entreprise ou numéro SIREN/SIRET
+- `query` (str): Nom de l'entreprise (ex: "Google France")
+- `page` (int, optionnel): Numéro de page pour la pagination (défaut: 1)
+- `per_page` (int, optionnel): Nombre de résultats par page, max 100 (défaut: 10)
 
 **Exemple:**
 ```json
 {
-  "query": "Google France"
+  "query": "Google France",
+  "page": 1,
+  "per_page": 10
 }
 ```
 
 ### 2. `get_company_details`
-Obtenir les détails complets d'une entreprise.
+Obtenir les détails complets d'une entreprise par SIREN.
 
 **Paramètres:**
 - `siren` (str): Numéro SIREN de l'entreprise (9 chiffres)
@@ -84,10 +88,10 @@ Obtenir les détails complets d'une entreprise.
 
 ### 1. Préparer le déploiement
 
-Le serveur est déjà configuré pour alpic.ai avec:
-- Port configurable via variable d'environnement `PORT`
-- Host `0.0.0.0` pour accepter les connexions externes
-- Transport **Streamable HTTP** (standard MCP recommandé, SSE est deprecated)
+Le serveur est configuré pour alpic.ai avec:
+- Python MCP SDK officiel (supporté par alpic.ai)
+- Transport stdio (alpic.ai gère automatiquement la conversion vers HTTP/SSE)
+- Configuration via `alpic.yaml`
 
 ### 2. Déployer sur alpic.ai
 
@@ -99,6 +103,8 @@ alpic login
 alpic deploy
 ```
 
+Ou utilisez l'interface web d'alpic.ai pour un déploiement en un clic depuis votre dépôt GitHub.
+
 ### 3. Configuration des variables d'environnement
 
 Dans le dashboard alpic.ai, configurer:
@@ -106,29 +112,20 @@ Dans le dashboard alpic.ai, configurer:
 
 ### 4. Utiliser le serveur déployé
 
-```python
-from agents.mcp import MCPServerStreamableHttp
-
-mcp_server = MCPServerStreamableHttp(
-    name="Pappers MCP Server",
-    params={
-        "url": "https://your-app.alpic.ai",  # URL fournie par alpic
-    },
-)
-```
+Le serveur déployé sera accessible via l'URL fournie par alpic.ai et pourra être utilisé par n'importe quel client MCP compatible.
 
 ## Architecture
 
 ```
-Client (Agents SDK)
-    ↓ Streamable HTTP
-MCP Server (FastMCP)
+Client MCP (Claude Desktop, etc.)
+    ↓ stdio / HTTP (géré par alpic.ai)
+MCP Server (Python MCP SDK)
     ↓ REST API
 Pappers.fr API
 ```
 
-**Transport:** Streamable HTTP (standard MCP, SSE deprecated)
-**Framework:** FastMCP (simple comme FastAPI)
+**Transport:** stdio (local) / HTTP (déployé sur alpic.ai)
+**Framework:** Python MCP SDK officiel
 **API:** Pappers.fr v2
 
 ## Développement
@@ -156,7 +153,7 @@ ruff format .
 ## Ressources
 
 - **API Pappers.fr**: https://www.pappers.fr/api/documentation
-- **FastMCP**: https://github.com/jlowin/fastmcp
+- **Python MCP SDK**: https://github.com/modelcontextprotocol/python-sdk
 - **MCP Protocol**: https://modelcontextprotocol.io
 - **alpic.ai**: https://docs.alpic.ai/
 

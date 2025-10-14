@@ -5,22 +5,14 @@ name: mcp-pappers
 version: 0.1.0
 
 runtime:
-  python: "3.10"
+  python: "3.13"
 
-# Entry point
+# Entry point - MCP SDK uses stdio transport
 start: python -m mcp_pappers.server
 
 # Environment variables (configure in alpic.ai dashboard)
 env:
   - PAPPERS_API_KEY
-  - PORT=8001
-
-# Health check
-healthcheck:
-  path: /health
-  interval: 30s
-  timeout: 10s
-  retries: 3
 
 # Resources
 resources:
