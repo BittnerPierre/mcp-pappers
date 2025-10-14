@@ -6,12 +6,8 @@ from typing import Any
 
 import httpx
 from dotenv import load_dotenv
-from mcp.server import Server
-from mcp.server.stdio import stdio_server
-from mcp.types import Tool, TextContent
-import uvicorn
-from starlette.applications import Starlette
-from starlette.routing import Route
+from mcp.server.fastmcp import FastMCP
+from pydantic import Field
 
 # Load environment variables
 load_dotenv()
@@ -23,8 +19,8 @@ PAPPERS_BASE_URL = "https://api.pappers.fr/v2"
 if not PAPPERS_API_KEY:
     raise ValueError("PAPPERS_API_KEY environment variable is required")
 
-# Create MCP server
-server = Server("pappers-mcp-server")
+# Create FastMCP server (alpic.ai compatible)
+mcp = FastMCP("Pappers MCP Server", stateless_http=True)
 
 
 async def _call_pappers_api(endpoint: str, params: dict[str, Any]) -> dict[str, Any]:
@@ -50,8 +46,16 @@ async def _call_pappers_api(endpoint: str, params: dict[str, Any]) -> dict[str, 
         return response.json()
 
 
-async def _search_companies_handler(query: str, page: int = 1, per_page: int = 10) -> str:
-    """Internal handler for search_companies tool."""
+@mcp.tool(
+    title="Search Companies",
+    description="Search for French companies using Pappers.fr API"
+)
+async def search_companies(
+    query: str = Field(description="Company name or search text (e.g., 'Google France')"),
+    page: int = Field(default=1, description="Page number for pagination"),
+    per_page: int = Field(default=10, description="Number of results per page, max 100")
+) -> str:
+    """Search for French companies."""
     params = {
         "q": query,
         "page": page,
@@ -91,8 +95,14 @@ async def _search_companies_handler(query: str, page: int = 1, per_page: int = 1
         return f"Error calling Pappers API: {str(e)}"
 
 
-async def _get_company_details_handler(siren: str) -> str:
-    """Internal handler for get_company_details tool."""
+@mcp.tool(
+    title="Get Company Details",
+    description="Get detailed information about a French company by SIREN"
+)
+async def get_company_details(
+    siren: str = Field(description="9-digit SIREN number (e.g., '443061841' for Google France)")
+) -> str:
+    """Get detailed company information."""
     # Validate SIREN format (9 digits)
     if not siren.isdigit() or len(siren) != 9:
         return f"Invalid SIREN format. Must be 9 digits, got: {siren}"
@@ -144,142 +154,6 @@ async def _get_company_details_handler(siren: str) -> str:
         return f"Error calling Pappers API: {str(e)}"
 
 
-# Register tools
-@server.list_tools()
-async def list_tools() -> list[Tool]:
-    """List available tools."""
-    return [
-        Tool(
-            name="search_companies",
-            description=(
-                "Search for French companies using Pappers.fr API. "
-                "Returns a JSON string with search results containing total count, "
-                "page information, and an array of companies with basic info "
-                "(siren, denomination, siege address, date_creation, statut)."
-            ),
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "Company name or search text (e.g., 'Google France')",
-                    },
-                    "page": {
-                        "type": "integer",
-                        "description": "Page number for pagination (default: 1)",
-                        "default": 1,
-                    },
-                    "per_page": {
-                        "type": "integer",
-                        "description": "Number of results per page, max 100 (default: 10)",
-                        "default": 10,
-                        "maximum": 100,
-                    },
-                },
-                "required": ["query"],
-            },
-        ),
-        Tool(
-            name="get_company_details",
-            description=(
-                "Get detailed information about a French company by SIREN. "
-                "Returns a JSON string with complete company information including "
-                "basic info (denomination, date_creation, forme_juridique), "
-                "financial data (capital, chiffre_affaires, resultat), "
-                "contact info (siege address), legal status, representatives, and establishments."
-            ),
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "siren": {
-                        "type": "string",
-                        "description": "9-digit SIREN number (e.g., '443061841' for Google France)",
-                        "pattern": "^[0-9]{9}$",
-                    },
-                },
-                "required": ["siren"],
-            },
-        ),
-    ]
-
-
-@server.call_tool()
-async def call_tool(name: str, arguments: dict) -> list[TextContent]:
-    """Handle tool calls."""
-    if name == "search_companies":
-        result = await _search_companies_handler(
-            query=arguments["query"],
-            page=arguments.get("page", 1),
-            per_page=arguments.get("per_page", 10),
-        )
-        return [TextContent(type="text", text=result)]
-    elif name == "get_company_details":
-        result = await _get_company_details_handler(siren=arguments["siren"])
-        return [TextContent(type="text", text=result)]
-    else:
-        raise ValueError(f"Unknown tool: {name}")
-
-
-def create_app() -> Starlette:
-    """Create Starlette app with MCP handlers."""
-    from mcp.server.streamable_http import create_streamable_http_server
-
-    # Create MCP streamable HTTP server
-    sse_app = create_streamable_http_server(server)
-
-    return sse_app
-
-
-async def main_stdio():
-    """Run the MCP server with stdio transport (for local development)."""
-    import sys
-    import logging
-
-    # Configure logging to stderr (stdio is used for MCP protocol)
-    logging.basicConfig(
-        level=logging.INFO,
-        stream=sys.stderr,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
-    logger = logging.getLogger(__name__)
-
-    logger.info("Starting Pappers MCP Server (stdio)")
-    logger.info(f"API Key configured: {'✓' if PAPPERS_API_KEY else '✗'}")
-    logger.info("Available tools:")
-    logger.info("  - search_companies: Search for companies by name")
-    logger.info("  - get_company_details: Get full company info by SIREN")
-
-    async with stdio_server() as (read_stream, write_stream):
-        await server.run(
-            read_stream,
-            write_stream,
-            server.create_initialization_options()
-        )
-
-
-def main():
-    """Run the MCP server with streamable HTTP transport."""
-    # Get port from environment or use default
-    port = int(os.getenv("PORT", "8000"))
-    host = os.getenv("HOST", "0.0.0.0")
-
-    print(f"Starting Pappers MCP Server on {host}:{port}")
-    print(f"API Key configured: {'✓' if PAPPERS_API_KEY else '✗'}")
-    print("\nAvailable tools:")
-    print("  - search_companies: Search for companies by name")
-    print("  - get_company_details: Get full company info by SIREN")
-    print("\nPress Ctrl+C to stop")
-
-    # Create and run the Starlette app with MCP streamable HTTP
-    app = create_app()
-    uvicorn.run(app, host=host, port=port)
-
-
 if __name__ == "__main__":
-    # Check if stdio mode is requested
-    if os.getenv("MCP_TRANSPORT") == "stdio":
-        import asyncio
-        asyncio.run(main_stdio())
-    else:
-        # Default to HTTP transport for deployment
-        main()
+    # Run with streamable HTTP transport (alpic.ai compatible)
+    mcp.run(transport="streamable-http")
