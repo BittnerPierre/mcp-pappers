@@ -194,5 +194,5 @@ async def get_company_details(
 
 
 if __name__ == "__main__":
-    # Run with streamable HTTP transport (alpic.ai compatible)
-    mcp.run(transport="streamable-http")
+    # Run with SSE transport (HTTP-based, alpic.ai compatible)
+    mcp.run(transport="sse")
