@@ -9,6 +9,9 @@ from dotenv import load_dotenv
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import Tool, TextContent
+import uvicorn
+from starlette.applications import Starlette
+from starlette.routing import Route
 
 # Load environment variables
 load_dotenv()
@@ -217,8 +220,18 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
         raise ValueError(f"Unknown tool: {name}")
 
 
-async def main():
-    """Run the MCP server with stdio transport."""
+def create_app() -> Starlette:
+    """Create Starlette app with MCP handlers."""
+    from mcp.server.streamable_http import create_streamable_http_server
+
+    # Create MCP streamable HTTP server
+    sse_app = create_streamable_http_server(server)
+
+    return sse_app
+
+
+async def main_stdio():
+    """Run the MCP server with stdio transport (for local development)."""
     import sys
     import logging
 
@@ -230,13 +243,12 @@ async def main():
     )
     logger = logging.getLogger(__name__)
 
-    logger.info("Starting Pappers MCP Server")
+    logger.info("Starting Pappers MCP Server (stdio)")
     logger.info(f"API Key configured: {'✓' if PAPPERS_API_KEY else '✗'}")
     logger.info("Available tools:")
     logger.info("  - search_companies: Search for companies by name")
     logger.info("  - get_company_details: Get full company info by SIREN")
 
-    # Run with stdio transport
     async with stdio_server() as (read_stream, write_stream):
         await server.run(
             read_stream,
@@ -245,6 +257,29 @@ async def main():
         )
 
 
+def main():
+    """Run the MCP server with streamable HTTP transport."""
+    # Get port from environment or use default
+    port = int(os.getenv("PORT", "8000"))
+    host = os.getenv("HOST", "0.0.0.0")
+
+    print(f"Starting Pappers MCP Server on {host}:{port}")
+    print(f"API Key configured: {'✓' if PAPPERS_API_KEY else '✗'}")
+    print("\nAvailable tools:")
+    print("  - search_companies: Search for companies by name")
+    print("  - get_company_details: Get full company info by SIREN")
+    print("\nPress Ctrl+C to stop")
+
+    # Create and run the Starlette app with MCP streamable HTTP
+    app = create_app()
+    uvicorn.run(app, host=host, port=port)
+
+
 if __name__ == "__main__":
-    import asyncio
-    asyncio.run(main())
+    # Check if stdio mode is requested
+    if os.getenv("MCP_TRANSPORT") == "stdio":
+        import asyncio
+        asyncio.run(main_stdio())
+    else:
+        # Default to HTTP transport for deployment
+        main()

@@ -7,12 +7,13 @@ version: 0.1.0
 runtime:
   python: "3.13"
 
-# Entry point - MCP SDK uses stdio transport
+# Entry point - MCP SDK with streamable HTTP transport
 start: python -m mcp_pappers.server
 
 # Environment variables (configure in alpic.ai dashboard)
 env:
   - PAPPERS_API_KEY
+  - PORT=8000
 
 # Resources
 resources:
