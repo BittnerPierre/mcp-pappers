@@ -13,6 +13,7 @@ start: python -m mcp_pappers.server
 # Environment variables (configure in alpic.ai dashboard)
 env:
   - PAPPERS_API_KEY
+  - MCP_API_KEY  # Optional: Set to enable API key authentication
   - PORT=8000
 
 # Resources

@@ -15,12 +15,37 @@ load_dotenv()
 # Configuration
 PAPPERS_API_KEY = os.getenv("PAPPERS_API_KEY")
 PAPPERS_BASE_URL = "https://api.pappers.fr/v2"
+MCP_API_KEY = os.getenv("MCP_API_KEY")  # Optional: API key to protect this MCP server
 
 if not PAPPERS_API_KEY:
     raise ValueError("PAPPERS_API_KEY environment variable is required")
 
 # Create FastMCP server (alpic.ai compatible)
 mcp = FastMCP("Pappers MCP Server", stateless_http=True)
+
+
+def _validate_api_key(ctx) -> str | None:
+    """
+    Validate API key from request headers.
+
+    Returns:
+        Error message if validation fails, None if valid or no key configured.
+    """
+    # If no MCP_API_KEY is set, allow all requests (public mode)
+    if not MCP_API_KEY:
+        return None
+
+    # Check for x-api-key header
+    request_headers = ctx.request_context.headers if hasattr(ctx, 'request_context') else {}
+    api_key = request_headers.get("x-api-key")
+
+    if not api_key:
+        return "Authentication required: Missing x-api-key header"
+
+    if api_key != MCP_API_KEY:
+        return "Authentication failed: Invalid API key"
+
+    return None
 
 
 async def _call_pappers_api(endpoint: str, params: dict[str, Any]) -> dict[str, Any]:
@@ -53,9 +78,16 @@ async def _call_pappers_api(endpoint: str, params: dict[str, Any]) -> dict[str, 
 async def search_companies(
     query: str = Field(description="Company name or search text (e.g., 'Google France')"),
     page: int = Field(default=1, description="Page number for pagination"),
-    per_page: int = Field(default=10, description="Number of results per page, max 100")
+    per_page: int = Field(default=10, description="Number of results per page, max 100"),
+    ctx=None
 ) -> str:
     """Search for French companies."""
+    # Validate API key if configured
+    if ctx:
+        error = _validate_api_key(ctx)
+        if error:
+            return json.dumps({"error": error}, ensure_ascii=False, indent=2)
+
     params = {
         "q": query,
         "page": page,
@@ -100,9 +132,16 @@ async def search_companies(
     description="Get detailed information about a French company by SIREN"
 )
 async def get_company_details(
-    siren: str = Field(description="9-digit SIREN number (e.g., '443061841' for Google France)")
+    siren: str = Field(description="9-digit SIREN number (e.g., '443061841' for Google France)"),
+    ctx=None
 ) -> str:
     """Get detailed company information."""
+    # Validate API key if configured
+    if ctx:
+        error = _validate_api_key(ctx)
+        if error:
+            return json.dumps({"error": error}, ensure_ascii=False, indent=2)
+
     # Validate SIREN format (9 digits)
     if not siren.isdigit() or len(siren) != 9:
         return f"Invalid SIREN format. Must be 9 digits, got: {siren}"

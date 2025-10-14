@@ -108,7 +108,12 @@ Ou utilisez l'interface web d'alpic.ai pour un déploiement en un clic depuis vo
 ### 3. Configuration des variables d'environnement
 
 Dans le dashboard alpic.ai, configurer:
-- `PAPPERS_API_KEY`: Votre clé API Pappers
+- `PAPPERS_API_KEY`: Votre clé API Pappers (requis)
+- `MCP_API_KEY`: Clé API pour protéger votre serveur MCP (optionnel)
+
+**Mode public** (par défaut): Si `MCP_API_KEY` n'est pas défini, le serveur est accessible sans authentification.
+
+**Mode protégé**: Définir `MCP_API_KEY` avec une valeur secrète (ex: `my-secret-key-123`). Les clients devront alors envoyer le header `x-api-key` avec chaque requête.
 
 ### 4. Utiliser le serveur déployé
 
