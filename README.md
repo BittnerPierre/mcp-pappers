@@ -24,33 +24,11 @@ PAPPERS_API_KEY=your_api_key_here
 
 Obtenir une clé API gratuite sur: https://www.pappers.fr/api
 
-## Utilisation Locale
+## ⚠️ Important
 
-### Démarrer le serveur MCP
+Ce serveur est conçu pour être **déployé sur alpic.ai** avec le transport `streamable-http`. Il n'est pas configuré pour une utilisation locale avec Claude Desktop (qui nécessiterait `transport="stdio"`).
 
-Le serveur utilise le transport stdio standard du Python MCP SDK:
-
-```bash
-python -m mcp_pappers.server
-```
-
-### Configuration Claude Desktop
-
-Ajouter dans votre configuration Claude Desktop (`claude_desktop_config.json`):
-
-```json
-{
-  "mcpServers": {
-    "pappers": {
-      "command": "python",
-      "args": ["-m", "mcp_pappers.server"],
-      "env": {
-        "PAPPERS_API_KEY": "your_api_key_here"
-      }
-    }
-  }
-}
-```
+Pour déployer votre propre serveur, suivez les instructions ci-dessous.
 
 ## Outils MCP Disponibles
 
@@ -89,48 +67,75 @@ Obtenir les détails complets d'une entreprise par SIREN.
 ### 1. Préparer le déploiement
 
 Le serveur est configuré pour alpic.ai avec:
-- Python MCP SDK officiel (supporté par alpic.ai)
-- Transport stdio (alpic.ai gère automatiquement la conversion vers HTTP/SSE)
+- FastMCP (inclus dans le package `mcp`, supporté par alpic.ai)
+- Transport `streamable-http` (recommandé pour le déploiement cloud)
 - Configuration via `alpic.yaml`
 
-### 2. Déployer sur alpic.ai
+### 2. Pousser sur GitHub
 
 ```bash
-# Se connecter à alpic.ai
-alpic login
-
-# Déployer le serveur
-alpic deploy
+git add .
+git commit -m "Ready for deployment"
+git push origin main
 ```
 
-Ou utilisez l'interface web d'alpic.ai pour un déploiement en un clic depuis votre dépôt GitHub.
+### 3. Déployer depuis l'interface alpic.ai
 
-### 3. Configuration des variables d'environnement
+1. Connectez-vous sur https://alpic.ai
+2. Cliquez sur "New Server" ou "Deploy"
+3. Autorisez alpic.ai à accéder à votre repository GitHub
+4. Sélectionnez votre repository `mcp-pappers`
+5. Sélectionnez la branche `main`
+6. alpic.ai détecte automatiquement `alpic.yaml` et lance le déploiement
 
-Dans le dashboard alpic.ai, configurer:
+Documentation complète: https://docs.alpic.ai/quickstart
+
+### 4. Configurer les variables d'environnement
+
+**Option A: Via le dashboard alpic.ai**
+
+Dans l'interface de votre serveur déployé, ajoutez:
 - `PAPPERS_API_KEY`: Votre clé API Pappers (requis)
-- `MCP_API_KEY`: Clé API pour protéger votre serveur MCP (optionnel)
+- `MCP_API_KEY`: Clé secrète pour protéger l'accès (optionnel)
 
-**Mode public** (par défaut): Si `MCP_API_KEY` n'est pas défini, le serveur est accessible sans authentification.
+**Option B: Uploader un fichier .env**
 
-**Mode protégé**: Définir `MCP_API_KEY` avec une valeur secrète (ex: `my-secret-key-123`). Les clients devront alors envoyer le header `x-api-key` avec chaque requête.
+Créez un `.env` local et uploadez-le via le dashboard alpic.ai:
+```bash
+PAPPERS_API_KEY=your_pappers_api_key
+MCP_API_KEY=your_secret_key  # Optionnel
+```
 
-### 4. Utiliser le serveur déployé
+**Modes d'authentification:**
+- **Mode public** (par défaut): Si `MCP_API_KEY` n'est pas défini, le serveur est accessible sans authentification.
+- **Mode protégé**: Si `MCP_API_KEY` est défini, les clients doivent envoyer le header `x-api-key` avec chaque requête.
 
-Le serveur déployé sera accessible via l'URL fournie par alpic.ai et pourra être utilisé par n'importe quel client MCP compatible.
+### 5. Utiliser votre serveur déployé
+
+Une fois déployé, votre serveur sera accessible via une URL fournie par alpic.ai:
+```
+https://your-server-name-xxxxx.alpic.live
+```
+
+Pour tester, modifiez l'URL dans `test_client.py` (ligne 28) et exécutez:
+```bash
+python test_client.py
+```
 
 ## Architecture
 
 ```
-Client MCP (Claude Desktop, etc.)
-    ↓ stdio / HTTP (géré par alpic.ai)
-MCP Server (Python MCP SDK)
-    ↓ REST API
+Client MCP (Test client, applications)
+    ↓ HTTPS + SSE/Streamable-HTTP
+alpic.ai (Cloud Platform)
+    ↓
+MCP Server (FastMCP avec streamable-http)
+    ↓ REST API + Authentication
 Pappers.fr API
 ```
 
-**Transport:** stdio (local) / HTTP (déployé sur alpic.ai)
-**Framework:** Python MCP SDK officiel
+**Transport:** `streamable-http` (déployé sur alpic.ai)
+**Framework:** FastMCP (inclus dans le package `mcp`)
 **API:** Pappers.fr v2
 
 ## Développement
@@ -158,9 +163,11 @@ ruff format .
 ## Ressources
 
 - **API Pappers.fr**: https://www.pappers.fr/api/documentation
-- **Python MCP SDK**: https://github.com/modelcontextprotocol/python-sdk
+- **Python MCP SDK** (contient FastMCP): https://github.com/modelcontextprotocol/python-sdk
 - **MCP Protocol**: https://modelcontextprotocol.io
-- **alpic.ai**: https://docs.alpic.ai/
+- **alpic.ai Documentation**: https://docs.alpic.ai/
+- **alpic.ai Quickstart**: https://docs.alpic.ai/quickstart
+- **Tutorial complet**: Voir [TUTORIAL.md](./TUTORIAL.md)
 
 ## Licence
 
