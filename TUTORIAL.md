@@ -15,7 +15,7 @@ This tutorial documents our journey building **mcp-pappers**, a Model Context Pr
 - Accessible at: https://mcp-pappers-08aa3f2c.alpic.live/
 
 **Tech stack:**
-- Python 3.14+
+- Python 3.13+ (version utilisée par alpic.ai)
 - FastMCP (included in the `mcp` package - **NOT** a separate `fastmcp` package)
 - Pappers.fr API
 - alpic.ai cloud platform
@@ -27,7 +27,7 @@ This tutorial documents our journey building **mcp-pappers**, a Model Context Pr
 ## 📋 Prerequisites
 
 Before starting, you'll need:
-- Python 3.14 or higher
+- Python 3.13 or higher (3.13 est la version utilisée par alpic.ai)
 - `uv` package manager (faster than pip - install: `curl -LsSf https://astral.sh/uv/install.sh | sh`)
 - A Pappers.fr API key (free tier available at https://www.pappers.fr/api)
 - A GitHub account
@@ -61,7 +61,7 @@ name = "mcp-pappers"
 version = "0.1.0"
 description = "MCP server for Pappers.fr French company data API"
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.13"
 dependencies = [
     "mcp>=1.0.0",
     "httpx>=0.27.0",
