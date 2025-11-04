@@ -38,9 +38,24 @@ Before starting, you'll need:
 
 ## 🚀 Step-by-Step Implementation Guide
 
-### Phase 1: Initial Setup (The FastMCP Attempt)
+### Phase 1: Préparation et Génération avec Claude Code
 
-**Step 1: Create Project Structure**
+**Step 1: Récupérer les ressources nécessaires**
+
+Avant de commencer, rassemblez ces éléments:
+
+1. **Template alpic.ai**: https://github.com/alpic-ai/mcp-server-template-python
+   - Clonez ou téléchargez pour voir la structure
+   - Notez l'utilisation de `from mcp.server.fastmcp import FastMCP`
+
+2. **Documentation API Pappers**: Téléchargez le fichier OpenAPI
+   ```bash
+   curl -o api_v2.yaml https://api.pappers.fr/openapi/v2
+   ```
+
+3. **Clé API Pappers**: Obtenez une clé gratuite sur https://www.pappers.fr/api
+
+**Step 2: Créer la structure du projet**
 
 ```bash
 mkdir mcp-pappers
@@ -52,9 +67,120 @@ uv venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 ```
 
-**Step 2: Install Dependencies**
+**Step 3: Demander à Claude Code de générer le serveur MCP**
 
-Create `pyproject.toml` and install packages:
+Ouvrez Claude Code et utilisez ce prompt:
+
+```
+Je veux créer un serveur MCP pour l'API Pappers.fr qui fournit des données sur les entreprises françaises.
+
+CONTEXTE:
+- Template de référence: https://github.com/alpic-ai/mcp-server-template-python
+- API à utiliser: Pappers.fr v2 (j'ai téléchargé api_v2.yaml)
+- Déploiement cible: alpic.ai
+
+CONTRAINTES TECHNIQUES CRITIQUES:
+1. Utiliser le package `mcp>=1.0.0` (PAS le package `fastmcp` séparé)
+2. Import: `from mcp.server.fastmcp import FastMCP`
+3. Initialisation: `mcp = FastMCP("Pappers MCP Server", stateless_http=True)`
+4. Transport: `mcp.run(transport="streamable-http")` pour le déploiement cloud
+5. Décorateur: `@mcp.tool()` avec Pydantic Field pour les paramètres
+6. Ajouter un paramètre `ctx=None` à chaque tool pour l'authentification future
+
+OUTILS À IMPLÉMENTER:
+En te basant sur le fichier api_v2.yaml, crée deux outils:
+
+1. search_companies:
+   - Endpoint: GET /v2/recherche
+   - Paramètres: query (requis), page (défaut: 1), per_page (défaut: 10, max: 100)
+   - Retour: JSON formaté avec total, page, per_page, et liste des entreprises
+
+2. get_company_details:
+   - Endpoint: GET /v2/entreprise
+   - Paramètre: siren (9 chiffres)
+   - Validation: vérifier que siren est bien 9 chiffres
+   - Retour: JSON formaté avec toutes les infos de l'entreprise
+
+STRUCTURE DES FICHIERS:
+- mcp_pappers/
+  - __init__.py (vide)
+  - server.py (serveur principal)
+- pyproject.toml (dependencies: mcp>=1.0.0, httpx>=0.27.0, python-dotenv>=1.0.0)
+- alpic.yaml (configuration pour alpic.ai avec python 3.13)
+- .env (PAPPERS_API_KEY=...)
+- README.md
+
+AUTHENTIFICATION API:
+- L'API Pappers utilise un header `api-key`
+- La clé doit venir de la variable d'environnement PAPPERS_API_KEY
+- Utiliser httpx.AsyncClient pour les appels
+
+GESTION DES ERREURS:
+- Capturer les erreurs HTTP
+- Retourner des messages d'erreur clairs en français
+- Gérer le cas 404 pour les entreprises non trouvées
+
+Peux-tu générer le code complet en respectant EXACTEMENT ces contraintes ?
+```
+
+**Step 4: Vérifications post-génération**
+
+Une fois que Claude Code a généré le code, vérifiez:
+
+✅ **Dans server.py:**
+```python
+from mcp.server.fastmcp import FastMCP  # Bon import
+from pydantic import Field
+
+mcp = FastMCP("Pappers MCP Server", stateless_http=True)
+
+@mcp.tool(title="...", description="...")
+async def search_companies(
+    query: str = Field(...),
+    ctx=None  # Important pour l'auth future
+) -> str:
+    ...
+
+if __name__ == "__main__":
+    mcp.run(transport="streamable-http")
+```
+
+✅ **Dans pyproject.toml:**
+```toml
+requires-python = ">=3.13"
+dependencies = [
+    "mcp>=1.0.0",  # Inclut FastMCP
+    "httpx>=0.27.0",
+    "python-dotenv>=1.0.0",
+]
+```
+
+✅ **Dans alpic.yaml:**
+```yaml
+runtime:
+  python: "3.13"
+start: python -m mcp_pappers.server
+env:
+  - PAPPERS_API_KEY
+  - PORT=8000
+```
+
+**Step 5: Installer et tester**
+
+```bash
+# Installer les dépendances
+uv pip install -e .
+
+# Créer .env avec votre clé
+echo "PAPPERS_API_KEY=your_key_here" > .env
+
+# Tester la syntaxe
+python -m py_compile mcp_pappers/server.py
+```
+
+---
+
+### Phase 2: Ajout de l'Authentification (Post-Génération)
 ```toml
 [project]
 name = "mcp-pappers"
