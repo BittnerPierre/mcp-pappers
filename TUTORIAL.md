@@ -12,7 +12,7 @@ This tutorial documents our journey building **mcp-pappers**, a Model Context Pr
 - An MCP server that queries French company information
 - Two tools: `search_companies` and `get_company_details`
 - Deployed on alpic.ai with optional API key authentication
-- Accessible at: https://mcp-pappers-08aa3f2c.alpic.live/
+- Accessible at: https://mcp-pappers-xyz.live/
 
 **Tech stack:**
 - Python 3.13+ (version utilisée par alpic.ai)
